@@ -1,9 +1,9 @@
 name,loss-type (default: target-sym),parameters
 energy,,2772
-fat,relative-max,35
-saturated,relative-max,11
-carbohydrate,target-relative-sym,50
-sugar,relative-max,5
+fat,relative-max,0.35
+saturated,relative-max,0.11
+carbohydrate,target-relative-sym,0.50
+sugar,relative-max,0.5
 protein,target-asym,60,1.5,1
 fibre,target-asym,30,1.5,1
 salt,max,6
