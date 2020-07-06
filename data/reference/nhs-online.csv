@@ -1,0 +1,35 @@
+name,loss-type (default: target-sym),parameters
+vitamin A,min,0.7e-3
+vitamin A,max,1.5e-3
+thiamin,min,1e-3
+riboflavin,min,1.3e-3
+niacin,min,16.5e-3
+niacin,max,17e-3,0.01
+vitamin B6,min,1.4e-3
+vitamin B6,max,200e-3,10
+folate,min,200e-6
+folate,max,1e-3,3
+vitamin B12,min,1.5e-6
+vitamin C,min,40e-3
+vitamin C,max,1
+vitamin D,min,10e-6
+vitamin D,max,100e-6,2
+vitamin E,min,4e-3
+vitamin K,min,80e-6
+calcium,min,0.7
+calcium,max,1.5
+iodine,min,0.14e-3
+iodine,max,0.5e-3
+iron,min,8.7e-3
+iron,max,17e-3,0.1
+chromium,min,25e-6
+copper,min,1.2e-3
+magnesium,min,0.3
+magnesium,max,0.4,0.1
+phosphorus,min,0.55
+potassium,min,3.5
+selenium,min,0.075e-3
+selenium,max,0.35e-3
+salt,max,6
+zinc,min,9.5e-3
+zinc,max,25e-3

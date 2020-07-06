@@ -1,36 +1,5 @@
-import argparse
-from enum import Enum, unique, auto
-from typing import Tuple, Type
-
-# API_KEY = "ib5ChiIviuKpsWkyg3IVeGtnQkTYaAahnjB9gqem"
-# USFDA_URL
-# citation: U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, 2019. fdc.nal.usda.gov.
-
-@unique
-class MassUnit(Enum):
-    g = auto()
-    mg = auto()
-    ug = auto()
-
-
-@unique
-class EnergyUnit(Enum):
-    cal = auto()
-    kcal = auto()
-    J = auto()
-    kJ = auto()
-
-
-def GeneralItem(Unit: Type) -> Type:
-    return Tuple[float, Unit]
-
-
-InfoItem = GeneralItem(MassUnit)
-
-
-module nutrients where
 class Vitamins:
-    vitamin_a: InfoItem
+    Vitamin_a: InfoItem
     vitamin_b1: InfoItem [thiamin, thiamine]
     vitamin_b2: InfoItem [riboflavin]
     vitamin_b3: InfoItem [niacin]
