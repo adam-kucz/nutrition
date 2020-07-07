@@ -3,13 +3,15 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Callable, Mapping, List, NamedTuple, Union
 
-from nutritional_info import NutrientInfo
+from .nutritional_info import NutrientInfo
+
 
 # TODO: figure out a standardized way of combining two NamedTuples
 # class LossFields(NamedTuple):
 #     epsilon: float = 1e-5
 class Loss:
-    def __init__(self, epsilon: float = 1e-5) -> None:
+    def __init__(self, weight: float = 1, epsilon: float = 1e-5) -> None:
+        self.weight = weight
         self.__epsilon = epsilon
 
     @property
@@ -43,7 +45,8 @@ class Target(TargetFields, Loss):
     def loss(self, value: NutrientInfo) -> float:
         lack = self.target - value[self.key]
         too_low = lack > 0
-        return lack * (self.low_penalty if too_low else self.high_penalty)
+        return self.weight * lack * (
+            self.low_penalty if too_low else self.high_penalty)
 
     @staticmethod
     def make_symmetric(key: str, target: str,
@@ -87,7 +90,8 @@ class RelativeTarget(RelativeTargetFields, Loss):
     def loss(self, value: NutrientInfo) -> float:
         lack = self.multiplier * value[self.comparison] - value[self.key]
         too_low = lack > 0
-        return lack * (self.low_penalty if too_low else self.high_penalty)
+        return self.weight * lack * (
+            self.low_penalty if too_low else self.high_penalty)
 
     @staticmethod
     def make_symmetric(key: str, comparison: str, multiplier: str,
@@ -150,4 +154,16 @@ def read_reference(source: Path) -> List[Loss]:
         nutrient = line[0]
         loss_type = line[1] or 'target-sym'
         losses.append(TYPES[loss_type](nutrient, *line[2:]))
+    return losses
+
+
+def read_all_references(source: Path) -> Mapping[str, List[Loss]]:
+    losses = {}
+    lines = source.read_text().split('\n')
+    for line in csv.reader(lines):
+        if not line:
+            continue
+        name = line[0]
+        path = Path(line[1])
+        losses[name] = read_reference(path)
     return losses
