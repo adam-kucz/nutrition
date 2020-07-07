@@ -1,6 +1,6 @@
 import unittest
 
-import loss
+import src.loss
 
 
 class Test(unittest.TestCase):

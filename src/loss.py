@@ -6,6 +6,9 @@ from typing import Callable, Mapping, List, NamedTuple, Union
 from .nutritional_info import NutrientInfo
 
 
+Gradient = NutrientInfo
+
+
 # TODO: figure out a standardized way of combining two NamedTuples
 # class LossFields(NamedTuple):
 #     epsilon: float = 1e-5
@@ -22,16 +25,18 @@ class Loss:
     def loss(self, value: NutrientInfo) -> float:
         pass
 
-    def gradient(self, nutrient_info: NutrientInfo) -> NutrientInfo:
+    def gradient(self, nutrient_info: NutrientInfo) -> Gradient:
         current = self.loss(nutrient_info)
 
         def single_gradient(key: str, old_value: float):
-            new_info = dict(nutrient_info)
-            new_info.update({key: old_value * (1 + self.epsilon)})
+            new_info = NutrientInfo(nutrient_info)
+            new_info[key] = old_value * (1 + self.epsilon)
             return (self.loss(new_info) -
                     current) / (self.epsilon * old_value)
-        return {key: single_gradient(key, value)
-                for key, value in nutrient_info.items()}
+        return NutrientInfo(
+            nutrient_info.translation,
+            {key: single_gradient(key, value)
+             for key, value in nutrient_info.items()})
 
 
 class TargetFields(NamedTuple):
