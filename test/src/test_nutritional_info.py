@@ -1,17 +1,15 @@
 from pathlib import Path
 
 from hypothesis import given
-import hypothesis.strategies as st
+# import hypothesis.strategies as st
 
 import test.src.base as base
-from src.nutritional_info import NutrientInfo, read_translation
+import test.src.strategy as sty
+from src.nutritional_info import NutrientInfo, Translation
 
 
-translation = st.builds(Translation, st.dictionaries())
-nut_info = st.builds(NutrientInfo, )
-
-class TestRead(base.AdvancedTestCase):
-    def test_read_translation(self):
+class TestTranslation(base.AdvancedTestCase):
+    def test_translation_read(self):
         filepath = \
             Path(__file__).parent.parent / "data" / "nutritional-info-test-1.csv"
         filecontent = (
@@ -21,7 +19,7 @@ class TestRead(base.AdvancedTestCase):
             "\n"
             "water,h2o,H2O\n")
         filepath.write_text(filecontent)
-        result = read_translation(filepath)
+        result = Translation.read(filepath)
         expected = {
             'potato': 'potato',
             'tomato': 'potato',
@@ -34,6 +32,15 @@ class TestRead(base.AdvancedTestCase):
             'h2o': 'water',
             'H2O': 'water'}
         self.assertCountEqual(result.items(), expected.items())
+
+    @given(sty.translations(True))  # pyling: disable=no-value-for-parameter
+    def test_translation_with_canonical(self, tr: Translation) -> None:
+        for value in tr.canonical:
+            self.assertIn(value, tr.values())
+
+    @given(sty.translations())  # pylint: disable=no-value-for-parameter
+    def test_translation_create(self, tr: Translation) -> None:
+        self.assertCountEqual(tr.canonical, set(tr.values()))
 
 
 class TestNutrientInfo(base.AdvancedTestCase):
@@ -60,12 +67,12 @@ class TestNutrientInfo(base.AdvancedTestCase):
             from_alt_vals.internal.items(),
             vals.items())
 
-    @given(nut_info)
+    @given(sty.nut_info())
     def test_copy_init(self, example: NutrientInfo):
         self.assertEqual(NutrientInfo(example), example)
 
 
-    @given(nut_info())
+    @given(sty.nut_info())
     def test_add_unit(self,
                       translation: Mapping[str, str],
                       nut_info: NutritionalInfo):

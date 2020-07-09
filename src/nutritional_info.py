@@ -2,9 +2,7 @@ import csv
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
-from typing import (
-    Optional, Tuple, Union, overload,
-    Collection, Mapping, MutableMapping, MutableSet)
+from typing import (Optional, Tuple, Union, overload, Mapping, MutableMapping)
 from warnings import warn
 
 from funcy import flip, walk_values, join_with, merge_with, first

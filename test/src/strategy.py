@@ -1,39 +1,38 @@
 from typing import Optional, Dict
 
+import hypothesis as hyp
 import hypothesis.strategies as st
 
 from src.nutritional_info import Translation, NutrientInfo
 
 
+@st.composite
 def translations(
-        include_canonical: bool = False) -> st.SearchStrategy[Translation]:
+        draw, include_canonical: bool = False)\
+        -> Translation:
     nutrient_name = st.text(st.characters(blacklist_categories=('P', 'C')))
-    map_strategy = st.dictionaries(nutrient_name, nutrient_name)
+    mapping = draw(st.dictionaries(nutrient_name, nutrient_name))
     if include_canonical:
-        def add_canonical(dictionary: Dict[str, str]) -> Dict[str, str]:
-            new_dict = dict(dictionary)
-            new_dict.update({key: key for key in dictionary})
-            return new_dict
-        map_strategy = map_strategy\
-            .map(add_canonical)\
-            .filter(lambda d: all(key not in d.values() or key == value
-                                  for key, value in d.items()))
-    return st.builds(Translation, map_strategy)
+        mapping.update({key: key for key in mapping.values()})
+    hyp.assume(all(key not in mapping.values() or key == value
+                   for key, value in mapping.items()))
+    return Translation(mapping)
 
 
-def nut_infos(min_value: float = 0,
+@st.composite
+def nut_infos(draw, min_value: float = 0,
               max_value: Optional[float] = None,
-              no_values: bool = False) -> st.SearchStrategy[NutrientInfo]:
+              no_values: bool = False) -> NutrientInfo:
+    trans = draw(translations())  # pylint: disable=no-value-for-parameter
     if no_values:
-        return st.builds(NutrientInfo, translations())
-    return translations().flatmap(
-        lambda trans: st.builds(
-            NutrientInfo,
-            trans,
-            st.fixed_dictionaries(
-                {key: st.floats(min_value, max_value, allow_infinity=False)
-                 for key in trans.canonical})))
+        return NutrientInfo(trans)
+    values = draw(st.fixed_dictionaries(
+        {key: st.floats(min_value, max_value, allow_infinity=False)
+         for key in trans.canonical}))
+    return NutrientInfo(trans, values)
 
 
+# pylint: disable=no-value-for-parameter
 st.register_type_strategy(Translation, translations())
 st.register_type_strategy(NutrientInfo, nut_infos())
+# pylint: enable=no-value-for-parameter
