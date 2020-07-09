@@ -1,41 +1,68 @@
 import csv
 from collections import defaultdict
+from itertools import chain
 from pathlib import Path
-from typing import Mapping, MutableMapping, Optional, Tuple, Union, overload
+from typing import (
+    Optional, Tuple, Union, overload,
+    Collection, Mapping, MutableMapping, MutableSet)
+from warnings import warn
 
-from funcy import walk_values
-
-Translation = Mapping[str, str]
+from funcy import flip, walk_values, join_with, merge_with, first
 
 
-def read_translation(path: Path) -> Translation:
-    names: MutableMapping[str, str] = {}
-    lines = path.read_text().split('\n')
-    for line in csv.reader(lines):
-        if not line:
-            continue
-        key = line[0]
-        names[key] = key
-        for name in line[1:]:
-            names[name] = key
-    return names
+class Translation(Mapping[str, str]):
+    def __init__(self, mapping: Optional[Mapping[str, str]] = None) -> None:
+        mapping = mapping or {}
+        self.canonical = set(mapping.values())
+        for key, value in mapping.items():
+            if key in self.canonical and key != value:
+                raise ValueError(
+                    f"Mapping {mapping} is invalid "
+                    "as a basis for translation, "
+                    f"name '{key}' occurs both as a canonical "
+                    f"(in '{flip(mapping)[key]}': '{key}') "
+                    "and non-canonical (in '{key}': '{value}') name")
+        self.data = mapping
+
+    def __getitem__(self, key: str):
+        if key not in chain(self.data, self.canonical):
+            warn(f"Unknown nutrient name: {key}")
+        return self.data.get(key, key)
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    @staticmethod
+    def read(path: Path) -> 'Translation':
+        names: MutableMapping[str, str] = {}
+        lines = path.read_text().split('\n')
+        for line in csv.reader(lines):
+            if not line:
+                continue
+            key = line[0]
+            names[key] = key
+            for name in line[1:]:
+                names[name] = key
+        return Translation(names)
 
 
 class NutrientInfo(MutableMapping[str, float]):
     def __init__(self, translation: Union[Translation, 'NutrientInfo'],
                  values: Optional[Mapping[str, float]] = None) -> None:
         if isinstance(translation, NutrientInfo):
-            if values is not None:
-                cls = self.__class__.__name__
-                raise ValueError(
-                    f"{cls} does not accept a second argument "
-                    "if the first one is a {cls} object")
-            nut_info = translation
-            translation = nut_info.translation
-            values = nut_info.internal
+            nut_info, translation = translation, translation.translation
+            values = merge_with(first, values or {}, nut_info.internal)
         self.__translation = dict(translation)
+        canonical_values = join_with(
+            sum,
+            ({translation.get(key, key): value}
+             for key, value in values.items()))\
+            if values else {}
         self.__values: MutableMapping[str, float] = \
-            defaultdict(lambda: 0, values or {})
+            defaultdict(lambda: 0, canonical_values)
 
     @property
     def translation(self) -> Translation:
@@ -116,6 +143,18 @@ class NutrientInfo(MutableMapping[str, float]):
     def __imul__(self, multiplier: float) -> 'NutrientInfo':
         self.__values = walk_values(multiplier.__mul__, self.internal)
         return self
+
+    def __str__(self) -> str:
+        canonical_names = ", ".join(
+            f"{name} -> {canonical}"
+            for name, canonical in self.translation.items()
+            if name != canonical)
+        return (f"{self.__class__.__name__}("
+                f"canonical names: {canonical_names or 'None'}, "
+                f"values: {dict(self.internal)})")
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
 VOID_NUTRIENT = NutrientInfo({})

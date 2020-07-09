@@ -1,11 +1,14 @@
 import unittest
-from typing import Iterable, TypeVar
-
-
-A = TypeVar('A')
+from itertools import product
 
 
 class AdvancedTestCase(unittest.TestCase):
-    def assertSameElements(
-            self, iter1: Iterable[A], iter2: Iterable[A]) -> None:
-        self.assertEqual(sorted(iter1), sorted(iter2))
+    def assertAll(self, f, *args) -> None:
+        if not args:
+            return
+        for (i, value0), (j, value1) in product(enumerate(args), repeat=2):
+            with self.subTest(first=i, second=j):
+                f(value0, value1)
+
+    def assertAllEqual(self, *args) -> None:
+        self.assertAll(self.assertEqual, *args)
