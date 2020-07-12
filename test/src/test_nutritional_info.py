@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hypothesis import given
+from hypothesis import given, infer
 # import hypothesis.strategies as st
 
 import test.src.base as base
@@ -33,12 +33,12 @@ class TestTranslation(base.AdvancedTestCase):
             'H2O': 'water'}
         self.assertCountEqual(result.items(), expected.items())
 
-    @given(sty.translations(True))  # pyling: disable=no-value-for-parameter
+    @given(sty.translations())  # pylint: disable=no-value-for-parameter
     def test_translation_with_canonical(self, tr: Translation) -> None:
         for value in tr.canonical:
             self.assertIn(value, tr.values())
 
-    @given(sty.translations())  # pylint: disable=no-value-for-parameter
+    @given(tr=infer)
     def test_translation_create(self, tr: Translation) -> None:
         self.assertCountEqual(tr.canonical, set(tr.values()))
 
@@ -46,7 +46,7 @@ class TestTranslation(base.AdvancedTestCase):
 class TestNutrientInfo(base.AdvancedTestCase):
     def test_init(self):
         with self.assertRaises(Exception):
-            NutrientInfo()
+            NutrientInfo()  # pylint: disable=no-value-for-parameter
 
         translation = {'starch': 'carbohydrate',
                        'carbohydrate': 'carbohydrate',
@@ -67,41 +67,32 @@ class TestNutrientInfo(base.AdvancedTestCase):
             from_alt_vals.internal.items(),
             vals.items())
 
-    @given(sty.nut_info())
+    @given(example=infer)
     def test_copy_init(self, example: NutrientInfo):
         self.assertEqual(NutrientInfo(example), example)
 
-
-    @given(sty.nut_info())
+    @given(translation=infer, nut_info=infer)
     def test_add_unit(self,
-                      translation: Mapping[str, str],
-                      nut_info: NutritionalInfo):
+                      translation: Translation,
+                      nut_info: NutrientInfo):
         empty = NutrientInfo(translation)
-        self.assertAllEqual(nut_info, nut_info + empty, empty + nut_info)
-        old_nut_info = NutrientInfo()
+        zero = NutrientInfo(empty, {k: 0 for k in translation.canonical})
+        self.assertAllEqual(nut_info, nut_info + empty, empty + nut_info,
+                            nut_info + zero, zero + nut_info)
+        old_nut_info = NutrientInfo(nut_info)
+        nut_info += empty
+        self.assertEqual(nut_info, old_nut_info)
 
-    # def test_numeric(self):
-    #     alphabet = 'abcdef'
-    #     translation = {letter: letter for letter in alphabet}
+    @given(nut_info_0=infer, nut_info_1=infer)
+    def test_add_commutative(
+            self, nut_info_0: NutrientInfo, nut_info_1: NutrientInfo):
+        self.assertEqual(nut_info_0 + nut_info_1, nut_info_1 + nut_info_0)
 
-    #     def nth_info(n: int) -> NutrientInfo:
-    #         return NutrientInfo(translation, {c: n for c in alphabet})
-
-    #     empty = NutrientInfo(translation)
-    #     zero = nth_info(0)
-    #     one = nth_info(1)
-    #     example0 = NutrientInfo(empty, {'a': 2, 'b': 3})
-    #     example1 = NutrientInfo(empty, {c: ord(c)-ord('a') for c in alphabet})
-    #     with self.subTest('addition'):
-    #         with self.subTest('empty'):
-    #             self.assertAllEqual(one, empty + one, one + empty)
-    #             self.assertAllEqual(
-    #                 example0, empty + example0, example0 + empty)
-    #             self.assertAllEqual(
-    #                 example1, empty + example1, example1 + empty)
-    #         with self.subTest('adding ones'):
-    #             for i in range(10):
-    #                 with self.subTest(info=sum([one]*i, zero)):
-    #                     self.assertEqual(sum([one]*i, zero), nth_info(i))
-    #         # with self.subTest('general'):
-    #             # self.assertEqual(nth_info(2) + example1, 
+    @given(nut_info_0=infer, nut_info_1=infer, nut_info_2=infer)
+    def test_add_associative(self,
+                             nut_info_0: NutrientInfo,
+                             nut_info_1: NutrientInfo,
+                             nut_info_2: NutrientInfo):
+        self.assertEqual(
+            (nut_info_0 + nut_info_1) + nut_info_2,
+            nut_info_0 + (nut_info_1 + nut_info_2))

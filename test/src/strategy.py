@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional
 
 import hypothesis as hyp
 import hypothesis.strategies as st
@@ -7,13 +7,9 @@ from src.nutritional_info import Translation, NutrientInfo
 
 
 @st.composite
-def translations(
-        draw, include_canonical: bool = False)\
-        -> Translation:
+def translations(draw) -> Translation:
     nutrient_name = st.text(st.characters(blacklist_categories=('P', 'C')))
     mapping = draw(st.dictionaries(nutrient_name, nutrient_name))
-    if include_canonical:
-        mapping.update({key: key for key in mapping.values()})
     hyp.assume(all(key not in mapping.values() or key == value
                    for key, value in mapping.items()))
     return Translation(mapping)
@@ -23,6 +19,7 @@ def translations(
 def nut_infos(draw, min_value: float = 0,
               max_value: Optional[float] = None,
               no_values: bool = False) -> NutrientInfo:
+    hyp.assume(min_value >= 0)
     trans = draw(translations())  # pylint: disable=no-value-for-parameter
     if no_values:
         return NutrientInfo(trans)

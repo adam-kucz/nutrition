@@ -1,14 +1,15 @@
 import csv
-from collections import defaultdict
+from collections import defaultdict, UserDict
 from itertools import chain
 from pathlib import Path
-from typing import (Optional, Tuple, Union, overload, Mapping, MutableMapping)
+from typing import (
+    Optional, Collection, Union, overload, Mapping, MutableMapping)
 from warnings import warn
 
 from funcy import flip, walk_values, join_with, merge_with, first
 
 
-class Translation(Mapping[str, str]):
+class Translation(UserDict, Mapping[str, str]):
     def __init__(self, mapping: Optional[Mapping[str, str]] = None) -> None:
         mapping = mapping or {}
         self.canonical = set(mapping.values())
@@ -18,20 +19,14 @@ class Translation(Mapping[str, str]):
                     f"Mapping {mapping} is invalid "
                     "as a basis for translation, "
                     f"name '{key}' occurs both as a canonical "
-                    f"(in '{flip(mapping)[key]}': '{key}') "
-                    "and non-canonical (in '{key}': '{value}') name")
-        self.data = mapping
+                    f"(in '{flip(dict(mapping))[key]}': '{key}') "
+                    f"and non-canonical (in '{key}': '{value}') name")
+        self.data = dict(mapping, **{key: key for key in self.canonical})
 
     def __getitem__(self, key: str):
         if key not in chain(self.data, self.canonical):
             warn(f"Unknown nutrient name: {key}")
         return self.data.get(key, key)
-
-    def __iter__(self):
-        return iter(self.data)
-
-    def __len__(self):
-        return len(self.data)
 
     @staticmethod
     def read(path: Path) -> 'Translation':
@@ -46,6 +41,27 @@ class Translation(Mapping[str, str]):
                 names[name] = key
         return Translation(names)
 
+    def __str__(self) -> str:
+        return (f"{self.__class__.__name__}("
+                f"canonical: {self.canonical}, "
+                f"dict: {self.data})")
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    # TODO: relax compatibility conditions
+    def compatible_with(self, other: 'Translation') -> bool:
+        return set(self.canonical) == set(other.canonical) and\
+            not all(self[key] == other[key]
+                    for key in self if key in other)
+
+    def __add__(self, other: 'Translation') -> 'Translation':
+        if not self.compatible_with(other):
+            raise ValueError(
+                "Cannot add incompatible translation: "
+                f"{self} + {other}")
+        return Translation(dict(chain(self.items(), other.items())))
+
 
 class NutrientInfo(MutableMapping[str, float]):
     def __init__(self, translation: Union[Translation, 'NutrientInfo'],
@@ -53,7 +69,7 @@ class NutrientInfo(MutableMapping[str, float]):
         if isinstance(translation, NutrientInfo):
             nut_info, translation = translation, translation.translation
             values = merge_with(first, values or {}, nut_info.internal)
-        self.__translation = dict(translation)
+        self.__translation = translation
         canonical_values = join_with(
             sum,
             ({translation.get(key, key): value}
@@ -68,18 +84,14 @@ class NutrientInfo(MutableMapping[str, float]):
         return self.__translation
 
     @property
-    def internal(self) -> MutableMapping[str, float]:
+    def internal(self) -> Mapping[str, float]:
         """Internal representation of values on canonical names"""
         return self.__values
 
-    def canonical_name(self, name: str) -> str:
-        """Get canonical name for 'name'"""
-        return self.translation.get(name, name)
-
     @property
-    def all_names(self) -> Tuple[str, ...]:
+    def all_names(self) -> Collection[str]:
         """Get a list of all recognized nutrient names"""
-        return tuple(self.translation.keys())
+        return set(*self.translation.keys(), *self.translation.canonical)
 
     def __iter__(self):
         return iter(self.internal)
@@ -88,14 +100,14 @@ class NutrientInfo(MutableMapping[str, float]):
         return len(self.internal)
 
     def __getitem__(self, name: str) -> float:
-        return self.internal[self.canonical_name(name)]
+        return self.internal[self.translation[name]]
 
     def __delitem__(self, name: str) -> None:
-        del self.internal[self.canonical_name(name)]
+        del self.__values[self.translation[name]]
 
     def __setitem__(self, name: str, new_value: float) -> None:
         if name in self.all_names:
-            self.internal[self.canonical_name(name)] = new_value
+            self.__values[self.translation[name]] = new_value
         else:
             raise ValueError(f"{name} is not a known nutrient name")
 
@@ -106,7 +118,7 @@ class NutrientInfo(MutableMapping[str, float]):
         Merges translations of both NutrientInfo objects and
         adds values for the nutrients point-wise
         """
-        new_translation = dict(self.translation)
+        new_translation = Translation(self.translation)
         try:
             for key, name in other.translation.items():
                 if key not in new_translation:
@@ -122,17 +134,18 @@ class NutrientInfo(MutableMapping[str, float]):
 
     def __iadd__(self, other: 'NutrientInfo') -> 'NutrientInfo':
         for key, value in other.items():
-            self[self.canonical_name(key)] += value
+            self[self.translation[key]] += value
         return self
 
     @overload
     def __mul__(self, multiplier: float) -> 'NutrientInfo':
         ...
-    @overload
+
+    @overload  # noqa: F811
     def __mul__(self, multiplier: 'NutrientInfo') -> float:
         ...
 
-    def __mul__(self, multiplier):
+    def __mul__(self, multiplier):  # noqa: F811
         if isinstance(multiplier, NutrientInfo):
             return sum(self[key] * value for key, value in multiplier)
         return NutrientInfo(
@@ -155,4 +168,5 @@ class NutrientInfo(MutableMapping[str, float]):
         return str(self)
 
 
-VOID_NUTRIENT = NutrientInfo({})
+VOID_TRANSLATION = Translation()
+VOID_NUTRIENT = NutrientInfo(VOID_TRANSLATION)
