@@ -23,7 +23,7 @@ def nut_infos(draw, min_value: float = 0,
               no_values: bool = False) -> NutrientInfo:
     names = draw(nutrient_names())  # pylint: disable=no-value-for-parameter
     if no_values:
-        return NutrientInfo({name: 0 for name in names})
+        return NutrientInfo(names)
     return NutrientInfo(
         draw(st.fixed_dictionaries(
             {name: st.floats(min_value, max_value, allow_infinity=False)
