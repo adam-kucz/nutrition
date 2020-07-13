@@ -1,84 +1,42 @@
-from pathlib import Path
+from copy import deepcopy
+from itertools import tee
+from typing import Set, Mapping
 
-from hypothesis import given
-# import hypothesis.strategies as st
+from hypothesis import given, infer, reproduce_failure
+import hypothesis.strategies as st
 
 import test.src.base as base
 import test.src.strategy as sty
-from src.nutritional_info import NutrientInfo, Translation
-
-
-class TestTranslation(base.AdvancedTestCase):
-    def test_translation_read(self):
-        filepath = \
-            Path(__file__).parent.parent / "data" / "nutritional-info-test-1.csv"
-        filecontent = (
-            "potato,tomato,vegetable\n"
-            "sugar,carbohydrate,starch\n"
-            "salt\n"
-            "\n"
-            "water,h2o,H2O\n")
-        filepath.write_text(filecontent)
-        result = Translation.read(filepath)
-        expected = {
-            'potato': 'potato',
-            'tomato': 'potato',
-            'vegetable': 'potato',
-            'sugar': 'sugar',
-            'carbohydrate': 'sugar',
-            'starch': 'sugar',
-            'salt': 'salt',
-            'water': 'water',
-            'h2o': 'water',
-            'H2O': 'water'}
-        self.assertCountEqual(result.items(), expected.items())
-
-    @given(sty.translations(True))  # pyling: disable=no-value-for-parameter
-    def test_translation_with_canonical(self, tr: Translation) -> None:
-        for value in tr.canonical:
-            self.assertIn(value, tr.values())
-
-    @given(sty.translations())  # pylint: disable=no-value-for-parameter
-    def test_translation_create(self, tr: Translation) -> None:
-        self.assertCountEqual(tr.canonical, set(tr.values()))
+from src.nutritional_info import NutrientInfo, VOID_NUTRIENT_INFO
 
 
 class TestNutrientInfo(base.AdvancedTestCase):
-    def test_init(self):
-        with self.assertRaises(Exception):
-            NutrientInfo()
+    def test_init_default(self):
+        self.assertEqual(NutrientInfo(), VOID_NUTRIENT_INFO)
 
-        translation = {'starch': 'carbohydrate',
-                       'carbohydrate': 'carbohydrate',
-                       'salt': 'salt'}
-        basic = NutrientInfo(translation)
-        self.assertEqual(basic.translation, translation)
-        self.assertEqual(basic.internal, {})
+    @given(names=infer)
+    def test_init_iterable(self, names: Set[str]):
+        nut_info = NutrientInfo(names)
+        self.assertCountEqual(nut_info, names)
+        for value in nut_info.values():
+            self.assertEqual(value, 0)
 
-        vals = {'carbohydrate': 4, 'salt': 2}
-        alt_vals = {'starch': 4, 'salt': 2}
-        from_vals = NutrientInfo(translation, vals)
-        from_alt_vals = NutrientInfo(basic, alt_vals)
-        self.assertAllEqual(
-            from_vals.translation, from_alt_vals.translation, translation)
-        self.assertAll(
-            self.assertCountEqual,
-            from_vals.internal.items(),
-            from_alt_vals.internal.items(),
-            vals.items())
+    @given(mapping=st.dictionaries(st.text(), sty.reals()))
+    def test_init_mapping(self, mapping: Mapping[str, float]):
+        nut_info = NutrientInfo(mapping)
+        self.assertCountEqual(nut_info, mapping.keys())
+        for key, value in nut_info.items():
+            self.assertEqual(value, mapping[key])
 
-    @given(sty.nut_info())
-    def test_copy_init(self, example: NutrientInfo):
-        self.assertEqual(NutrientInfo(example), example)
+    @given(copy=infer)
+    def test_copy_init(self, copy: NutrientInfo):
+        original = deepcopy(copy)
+        self.assertAllEqual(NutrientInfo(copy), original, copy)
 
-
-    @given(sty.nut_info())
-    def test_add_unit(self,
-                      translation: Mapping[str, str],
-                      nut_info: NutritionalInfo):
-        empty = NutrientInfo(translation)
-        self.assertAllEqual(nut_info, nut_info + empty, empty + nut_info)
-        old_nut_info = NutrientInfo()
+    @given(nut_info=infer)
+    def test_add_unit(self, nut_info: NutrientInfo):
+        add_unit = VOID_NUTRIENT_INFO
+        self.assertAllEqual(nut_info, nut_info + add_unit, add_unit + nut_info)
 
     # def test_numeric(self):
     #     alphabet = 'abcdef'
