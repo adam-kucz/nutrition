@@ -2,7 +2,9 @@ import csv
 from abc import abstractmethod
 from pathlib import Path
 from typing import Callable, Mapping, List, NamedTuple, Union
+from warnings import warn
 
+from sympy import Expr
 from .nutritional_info import NutrientInfo
 
 
@@ -13,8 +15,11 @@ Gradient = NutrientInfo
 # class LossFields(NamedTuple):
 #     epsilon: float = 1e-5
 class Loss:
-    def __init__(self, weight: float = 1, epsilon: float = 1e-5) -> None:
-        self.weight = weight
+    def __init__(self, epsilon: float = 1e-5) -> None:
+        if epsilon <= 0:
+            raise ValueError(
+                "Cannot use nonpositive epsilon of {epsilon} "
+                "to compute gradients")
         self.__epsilon = epsilon
 
     @property
@@ -30,13 +35,23 @@ class Loss:
 
         def single_gradient(key: str, old_value: float):
             new_info = NutrientInfo(nutrient_info)
-            new_info[key] = old_value * (1 + self.epsilon)
+            new_info[key] = old_value * (1 + self.epsilon) if old_value else self.epsilon
             return (self.loss(new_info) -
                     current) / (self.epsilon * old_value)
         return NutrientInfo(
-            nutrient_info.translation,
             {key: single_gradient(key, value)
              for key, value in nutrient_info.items()})
+
+
+class AlgebraicLoss(Loss):
+    def __init__(self, expr: Expr, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        if expr.free_symbols():
+            pass
+        self.expression = expr
+
+    def loss(self, value: NutrientInfo) -> float:
+        return 0
 
 
 class TargetFields(NamedTuple):
@@ -50,7 +65,7 @@ class Target(TargetFields, Loss):
     def loss(self, value: NutrientInfo) -> float:
         lack = self.target - value[self.key]
         too_low = lack > 0
-        return self.weight * lack * (
+        return lack * (
             self.low_penalty if too_low else self.high_penalty)
 
     @staticmethod
@@ -83,19 +98,19 @@ class RelativeTargetFields(NamedTuple):
     high_penalty: float
 
 
-CALORIC_VALUE: Mapping[str, float] = {
+CALORIC_VALUE: NutrientInfo = NutrientInfo({
     'carbohydrate': 4,
     'protein': 4,
     'sugar': 4,
     'fat': 9,
-    'saturated': 9}
+    'saturated': 9})
 
 
 class RelativeTarget(RelativeTargetFields, Loss):
     def loss(self, value: NutrientInfo) -> float:
         lack = self.multiplier * value[self.comparison] - value[self.key]
         too_low = lack > 0
-        return self.weight * lack * (
+        return lack * (
             self.low_penalty if too_low else self.high_penalty)
 
     @staticmethod
@@ -126,6 +141,8 @@ class RelativeTarget(RelativeTargetFields, Loss):
     def make_max_energy_fraction(
             key: str, fraction: str,
             penalty: Union[str, int] = 1) -> 'RelativeTarget':
+        if key not in CALORIC_VALUE:
+            raise ValueError(f"Unknown caloric value for '{key}'")
         return RelativeTarget(
             key, 'energy', float(fraction) / CALORIC_VALUE[key],
             float(penalty), 0)
@@ -134,6 +151,8 @@ class RelativeTarget(RelativeTargetFields, Loss):
     def make_sym_energy_fraction(
             key: str, fraction: str,
             penalty: Union[str, int] = 1) -> 'RelativeTarget':
+        if key not in CALORIC_VALUE:
+            raise ValueError(f"Unknown caloric value for '{key}'")
         return RelativeTarget(
             key, 'energy', float(fraction) / CALORIC_VALUE[key],
             float(penalty), float(penalty))
@@ -156,9 +175,9 @@ def read_reference(source: Path) -> List[Loss]:
     for line in csv.reader(lines):
         if not line:
             continue
-        nutrient = line[0]
-        loss_type = line[1] or 'target-sym'
-        losses.append(TYPES[loss_type](nutrient, *line[2:]))
+        nutrient, loss_type, *args = line
+        loss_type = loss_type or 'target-sym'
+        losses.append(TYPES[loss_type](nutrient, *args))
     return losses
 
 
@@ -168,7 +187,8 @@ def read_all_references(source: Path) -> Mapping[str, List[Loss]]:
     for line in csv.reader(lines):
         if not line:
             continue
-        name = line[0]
-        path = Path(line[1])
-        losses[name] = read_reference(path)
+        name, pathname, *rest = line
+        if rest:
+            warn(f"Unexpected values: {rest}")
+        losses[name] = read_reference(Path(pathname))
     return losses

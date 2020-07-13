@@ -4,25 +4,24 @@ from itertools import chain
 from operator import mul
 from typing import (Union, overload, Mapping, Iterable, MutableMapping)
 
-from funcy import partial, merge_with, walk_values
+from funcy import partial, merge_with, walk_values  # type: ignore
+from sympy import Symbol  # type: ignore
 
 
-class NutrientInfo(UserDict, MutableMapping[str, float]):
-    def __init__(
-            self,
-            values: Union[Mapping[str, float], Iterable[str], None] = None)\
-            -> None:
+class NutrientInfo(UserDict, MutableMapping[Symbol, float]):
+    def __init__(self, values: Union[Mapping[Symbol, float],
+                               Iterable[Symbol], None] = None) -> None:
         self.data = {}  # for pylint
         if not isinstance(values, Mapping):
-            values = {name: 0 for name in values or ()}
+            values = {sym: 0 for sym in values or ()}
         super().__init__(values)
 
-    def __missing__(self, _: str) -> float:
+    def __missing__(self, _: Symbol) -> float:
         return 0
 
     @staticmethod
-    def constant(names: Iterable[str], value: float = 0):
-        return NutrientInfo({name: value for name in names})
+    def constant(symbols: Iterable[Symbol], value: float = 0):
+        return NutrientInfo({sym: value for sym in symbols})
 
     def __add__(self, other: 'NutrientInfo') -> 'NutrientInfo':
         """
@@ -60,14 +59,6 @@ class NutrientInfo(UserDict, MutableMapping[str, float]):
         return all(math.isclose(self[key], other[key],
                                 rel_tol=rel_tol, abs_tol=abs_tol)
                    for key in chain(self, other))
-
-    # def __str__(self) -> str:
-    #     return (f"{self.__class__.__name__}("
-    #             f"canonical names: {canonical_names or 'None'}, "
-    #             f"values: {dict(self.internal)})")
-
-    # def __repr__(self) -> str:
-    #     return str(self)
 
 
 VOID_NUTRIENT_INFO = NutrientInfo()

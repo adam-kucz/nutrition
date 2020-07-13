@@ -1,6 +1,7 @@
 from typing import Optional
 
 import hypothesis.strategies as st
+from sympy import Symbol  # type: ignore
 
 from src.nutritional_info import NutrientInfo
 
@@ -11,25 +12,28 @@ def reals(*args, **kwargs) -> st.SearchStrategy[float]:
     return st.floats(*args, **kwargs)
 
 
-def nutrient_names(*args, **kwargs) -> st.SearchStrategy[str]:
+def nutrients(*args, **kwargs) -> st.SearchStrategy[Symbol]:
     kwargs.setdefault('alphabet',
                       st.characters(blacklist_categories=('P', 'C')))
-    return st.text(*args, **kwargs)
+    return st.builds(Symbol, st.text(*args, **kwargs))
 
 
 @st.composite
 def nut_infos(draw, min_value: float = 0,
               max_value: Optional[float] = None,
               no_values: bool = False) -> NutrientInfo:
-    names = draw(nutrient_names())  # pylint: disable=no-value-for-parameter
+    # pylint: disable=no-value-for-parameter
+    symbols = draw(st.iterables(nutrients()))
+    # pylint: enable=no-value-for-parameter
     if no_values:
-        return NutrientInfo(names)
+        return NutrientInfo(symbols)
     return NutrientInfo(
         draw(st.fixed_dictionaries(
-            {name: st.floats(min_value, max_value, allow_infinity=False)
-             for name in names})))
+            {sym: st.floats(min_value, max_value, allow_infinity=False)
+             for sym in symbols})))
 
 
 # pylint: disable=no-value-for-parameter
+st.register_type_strategy(Symbol, nutrients())
 st.register_type_strategy(NutrientInfo, nut_infos())
 # pylint: enable=no-value-for-parameter

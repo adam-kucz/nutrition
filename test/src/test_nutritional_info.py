@@ -4,7 +4,8 @@ from itertools import chain
 from typing import Set, Mapping, List, Iterable
 
 import hypothesis.strategies as st
-from hypothesis import given, infer, assume, reproduce_failure
+from hypothesis import given, infer, assume
+from sympy import Symbol  # type: ignore
 
 import test.src.base as base
 import test.src.strategy as sty
@@ -15,15 +16,15 @@ class TestNutrientInfo(base.AdvancedTestCase):
     def test_init_default(self):
         self.assertEqual(NutrientInfo(), VOID_NUTRIENT_INFO)
 
-    @given(names=infer)
-    def test_init_iterable(self, names: Set[str]):
-        nut_info = NutrientInfo(names)
-        self.assertCountEqual(nut_info, names)
+    @given(symbols=infer)
+    def test_init_iterable(self, symbols: Set[Symbol]):
+        nut_info = NutrientInfo(symbols)
+        self.assertCountEqual(nut_info, symbols)
         for value in nut_info.values():
             self.assertEqual(value, 0)
 
     @given(mapping=st.dictionaries(st.text(), sty.reals()))
-    def test_init_mapping(self, mapping: Mapping[str, float]):
+    def test_init_mapping(self, mapping: Mapping[Symbol, float]):
         nut_info = NutrientInfo(mapping)
         self.assertCountEqual(nut_info, mapping.keys())
         for key, value in nut_info.items():
@@ -34,9 +35,9 @@ class TestNutrientInfo(base.AdvancedTestCase):
         original = deepcopy(copy)
         self.assertAllEqual(NutrientInfo(copy), original, copy)
 
-    @given(names=infer, value=sty.reals())
-    def test_constant(self, names: Iterable[str], value: float):
-        for value_1 in NutrientInfo.constant(names, value).values():
+    @given(symbols=infer, value=sty.reals())
+    def test_constant(self, symbols: Iterable[Symbol], value: float):
+        for value_1 in NutrientInfo.constant(symbols, value).values():
             self.assertEqual(value, value_1)
 
     @given(nut_info=infer)
@@ -60,13 +61,13 @@ class TestNutrientInfo(base.AdvancedTestCase):
             (nut_info_0 + nut_info_1) + nut_info_2,
             nut_info_0 + (nut_info_1 + nut_info_2)))
 
-    @given(names=infer, value_0=sty.reals(), value_1=sty.reals())
+    @given(symbols=infer, value_0=sty.reals(), value_1=sty.reals())
     def test_add_constant(
-            self, names: List[str], value_0: float, value_1: float):
+            self, symbols: List[Symbol], value_0: float, value_1: float):
         self.assertTrue(NutrientInfo.isclose(
-            NutrientInfo.constant(names, value_0) +
-            NutrientInfo.constant(names, value_1),
-            NutrientInfo.constant(names, value_0 + value_1)))
+            NutrientInfo.constant(symbols, value_0) +
+            NutrientInfo.constant(symbols, value_1),
+            NutrientInfo.constant(symbols, value_0 + value_1)))
 
     @given(nut_info_0=infer, nut_info_1=infer)
     def test_add_general(
