@@ -10,7 +10,7 @@ from sympy import Symbol  # type: ignore
 
 class NutrientInfo(UserDict, MutableMapping[Symbol, float]):
     def __init__(self, values: Union[Mapping[Symbol, float],
-                               Iterable[Symbol], None] = None) -> None:
+                                     Iterable[Symbol], None] = None) -> None:
         self.data = {}  # for pylint
         if not isinstance(values, Mapping):
             values = {sym: 0 for sym in values or ()}

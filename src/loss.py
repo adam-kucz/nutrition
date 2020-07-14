@@ -1,10 +1,14 @@
 import csv
 from abc import abstractmethod
+from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Mapping, List, NamedTuple, Union
+from typing import Callable, Mapping, List, Iterable, NamedTuple, Union
 from warnings import warn
 
-from sympy import Expr
+from sympy import (  # type: ignore
+    sympify, S,
+    Symbol, Expr, Derivative, Piecewise, Lambda, Dummy)
+
 from .nutritional_info import NutrientInfo
 
 
@@ -44,129 +48,125 @@ class Loss:
 
 
 class AlgebraicLoss(Loss):
-    def __init__(self, expr: Expr, *args, **kwargs) -> None:
+    def __init__(self, expr, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        if expr.free_symbols():
-            pass
-        self.expression = expr
+        self.expression = sympify(expr)
+        self.grad_exprs = defaultdict(
+            lambda: S.Zero,
+            {symbol: Derivative(self.expression, symbol)
+             for symbol in self.symbols})
+
+    @property
+    def symbols(self) -> Iterable[Symbol]:
+        return self.expression.free_symbols
+        
+    def ensure_sufficient(self, value: NutrientInfo) -> None:
+        for symbol in self.symbols:
+            if symbol not in value:
+                raise ValueError(f"No value for '{symbol}' in {value}")
 
     def loss(self, value: NutrientInfo) -> float:
-        return 0
+        self.ensure_sufficient(value)
+        return float(self.expression.subs(value))
+
+    def gradient(self, value: NutrientInfo) -> Gradient:
+        self.ensure_sufficient(value)
+        return NutrientInfo({symbol: float(self.grad_exprs[symbol].subs(value))
+                             for symbol in value})
 
 
-class TargetFields(NamedTuple):
-    key: str
-    target: float
-    low_penalty: float
-    high_penalty: float
-
-
-class Target(TargetFields, Loss):
-    def loss(self, value: NutrientInfo) -> float:
-        lack = self.target - value[self.key]
-        too_low = lack > 0
-        return lack * (
-            self.low_penalty if too_low else self.high_penalty)
-
-    @staticmethod
-    def make_symmetric(key: str, target: str,
-                       penalty: Union[str, int] = 1) -> 'Target':
-        return Target(key, float(target), float(penalty), float(penalty))
-
-    @staticmethod
-    def make_asymmetric(key: str, target: str,
-                        low_penalty: str, high_penalty) -> 'Target':
-        return Target(key, float(target),
-                      float(low_penalty), float(high_penalty))
-
-    @staticmethod
-    def make_max_limit(key: str, limit: str,
-                       penalty: Union[str, int] = 1) -> 'Target':
-        return Target(key, float(limit), 0, float(penalty))
-
-    @staticmethod
-    def make_min_limit(key: str, limit: str,
-                       penalty: Union[str, int] = 1) -> 'Target':
-        return Target(key, float(limit), float(penalty), 0)
-
-
-class RelativeTargetFields(NamedTuple):
-    key: str
-    comparison: str
-    multiplier: float
-    low_penalty: float
-    high_penalty: float
-
-
+ENERGY = Symbol('energy')
 CALORIC_VALUE: NutrientInfo = NutrientInfo({
-    'carbohydrate': 4,
-    'protein': 4,
-    'sugar': 4,
-    'fat': 9,
-    'saturated': 9})
+    Symbol('carbohydrate'): 4,
+    Symbol('protein'): 4,
+    Symbol('sugar'): 4,
+    Symbol('fat'): 9,
+    Symbol('saturated'): 9})
 
 
-class RelativeTarget(RelativeTargetFields, Loss):
-    def loss(self, value: NutrientInfo) -> float:
-        lack = self.multiplier * value[self.comparison] - value[self.key]
-        too_low = lack > 0
-        return lack * (
-            self.low_penalty if too_low else self.high_penalty)
+class Target(AlgebraicLoss):
+    def __init__(self, expr, target, low_penalty, high_penalty) -> None:
+        expr = sympify(expr)
+        target = sympify(target)
+        low_penalty = sympify(low_penalty)
+        high_penalty = sympify(high_penalty)
+        if not callable(low_penalty):
+            low_penalty = Lambda(Dummy(), low_penalty)
+        if not callable(high_penalty):
+            high_penalty = Lambda(Dummy(), high_penalty)
 
-    @staticmethod
-    def make_symmetric(key: str, comparison: str, multiplier: str,
-                       penalty: Union[str, int] = 1) -> 'RelativeTarget':
-        return RelativeTarget(
-            key, comparison, float(multiplier), float(penalty), float(penalty))
-
-    @staticmethod
-    def make_asymmetric(key: str, comparison: str, multiplier: str,
-                        low_penalty: str, high_penalty) -> 'RelativeTarget':
-        return RelativeTarget(key, comparison, float(multiplier),
-                              float(low_penalty), float(high_penalty))
+        lack: Expr = abs(expr - target)
+        expression = lack *\
+            Piecewise((low_penalty(lack), expr < target),
+                      (high_penalty(lack), True))
+        super().__init__(expression)
 
     @staticmethod
-    def make_max_limit(key: str, comparison: str, multiplier: str,
-                       penalty: Union[str, int] = 1) -> 'RelativeTarget':
-        return RelativeTarget(key, comparison, float(multiplier),
-                              0, float(penalty))
+    def symmetric(key: str, target: str,
+                  penalty: Union[str, int] = 1) -> 'Target':
+        return Target(key, target, penalty, penalty)
 
     @staticmethod
-    def make_min_limit(key: str, comparison: str, multiplier: str,
-                       penalty: Union[str, int] = 1) -> 'RelativeTarget':
-        return RelativeTarget(key, comparison, float(multiplier),
-                              float(penalty), 0)
+    def max_limit(key: str, limit: str, penalty: str = '1') -> 'Target':
+        return Target(key, limit, 0, penalty)
 
     @staticmethod
-    def make_max_energy_fraction(
+    def min_limit(key: str, limit: str, penalty: str = '1') -> 'Target':
+        return Target(key, limit, penalty, 0)
+
+    @staticmethod
+    def relative(
+            key: str, comparison: str, multiplier: str,
+            low_penalty: Union[str, float],
+            high_penalty: Union[str, float]) -> 'Target':
+        target = sympify(multiplier) * sympify(comparison)
+        return Target(key, target, low_penalty, high_penalty)
+
+    @staticmethod
+    def relative_symmetric(key: str, comparison: str,
+                           multiplier: str, penalty: str = '1') -> 'Target':
+        return Target.relative(key, comparison, multiplier, penalty, penalty)
+
+    @staticmethod
+    def relative_max_limit(key: str, comparison: str, multiplier: str,
+                           penalty: str = '1') -> 'Target':
+        return Target.relative(key, comparison, multiplier, 0, penalty)
+
+    @staticmethod
+    def relative_min_limit(key: str, comparison: str, multiplier: str,
+                           penalty: str = '1') -> 'Target':
+        return Target.relative(key, comparison, multiplier, penalty, 0)
+
+    @staticmethod
+    def max_energy_fraction(
             key: str, fraction: str,
-            penalty: Union[str, int] = 1) -> 'RelativeTarget':
+            penalty: Union[str, int] = 1) -> 'Target':
+        key = sympify(key)
         if key not in CALORIC_VALUE:
             raise ValueError(f"Unknown caloric value for '{key}'")
-        return RelativeTarget(
-            key, 'energy', float(fraction) / CALORIC_VALUE[key],
-            float(penalty), 0)
+        multiplier = sympify(fraction) / CALORIC_VALUE[key]
+        return Target.relative(key, ENERGY, multiplier, penalty, 0)
 
     @staticmethod
-    def make_sym_energy_fraction(
+    def energy_fraction(
             key: str, fraction: str,
-            penalty: Union[str, int] = 1) -> 'RelativeTarget':
+            penalty: Union[str, int] = 1) -> 'Target':
+        key = sympify(key)
         if key not in CALORIC_VALUE:
             raise ValueError(f"Unknown caloric value for '{key}'")
-        return RelativeTarget(
-            key, 'energy', float(fraction) / CALORIC_VALUE[key],
-            float(penalty), float(penalty))
+        multiplier = sympify(fraction) / CALORIC_VALUE[key]
+        return Target.relative(key, ENERGY, multiplier, penalty, penalty)
 
 
 TYPES: Mapping[str, Callable[..., Loss]] = {
-    'target-sym': Target.make_symmetric,
-    'target-asym': Target.make_asymmetric,
-    'max': Target.make_max_limit,
-    'min': Target.make_min_limit,
-    'relative-max': RelativeTarget.make_max_energy_fraction,
-    'target-relative-sym': RelativeTarget.make_sym_energy_fraction,
-    'target-relative-to-sym': RelativeTarget.make_symmetric,
-    'target-relative-to-asym': RelativeTarget.make_asymmetric}
+    'target-sym': Target.symmetric,
+    'target-asym': Target,
+    'max': Target.max_limit,
+    'min': Target.min_limit,
+    'relative-max': Target.max_energy_fraction,
+    'target-relative-sym': Target.energy_fraction,
+    'target-relative-to-sym': Target.relative_symmetric,
+    'target-relative-to-asym': Target.relative}
 
 
 def read_reference(source: Path) -> List[Loss]:
