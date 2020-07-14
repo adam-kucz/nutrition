@@ -2,7 +2,8 @@ import csv
 from abc import abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Mapping, List, Iterable, NamedTuple, Union
+from typing import (
+    Callable, Mapping, List, Iterable, Union, MutableMapping)
 from warnings import warn
 
 from sympy import (  # type: ignore
@@ -71,25 +72,31 @@ class AlgebraicLoss(Loss):
 
     def gradient(self, value: NutrientInfo) -> Gradient:
         self.ensure_sufficient(value)
-        return NutrientInfo({symbol: float(self.grad_exprs[symbol].subs(value))
-                             for symbol in value})
+        grad: MutableMapping[Symbol, float] = defaultdict(lambda: 0)
+        for symbol in value:
+            grad[symbol] = float(self.grad_exprs[symbol].subs(value))
+        return Gradient(grad)
+
+    def __str__(self) -> str:
+        return f"AlgebraicLoss(expression={self.expression})"
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
-ENERGY = Symbol('energy')
+ENERGY = Symbol('energy', real=True)
 CALORIC_VALUE: NutrientInfo = NutrientInfo({
-    Symbol('carbohydrate'): 4,
-    Symbol('protein'): 4,
-    Symbol('sugar'): 4,
-    Symbol('fat'): 9,
-    Symbol('saturated'): 9})
+    Symbol('carbohydrate', real=True): 4,
+    Symbol('protein', real=True): 4,
+    Symbol('sugar', real=True): 4,
+    Symbol('fat', real=True): 9,
+    Symbol('saturated', real=True): 9})
 
 
 class Target(AlgebraicLoss):
     def __init__(self, expr, target, low_penalty, high_penalty) -> None:
-        expr = sympify(expr)
-        target = sympify(target)
-        low_penalty = sympify(low_penalty)
-        high_penalty = sympify(high_penalty)
+        expr, target, low_penalty, high_penalty =\
+            sympify((expr, target, low_penalty, high_penalty))
         if not callable(low_penalty):
             low_penalty = Lambda(Dummy(), low_penalty)
         if not callable(high_penalty):
@@ -102,29 +109,34 @@ class Target(AlgebraicLoss):
         super().__init__(expression)
 
     @staticmethod
-    def symmetric(key: str, target: str,
-                  penalty: Union[str, int] = 1) -> 'Target':
+    def symmetric(key: Union[str, Symbol], target: Union[str, float],
+                  penalty: Union[str, float] = 1) -> 'Target':
         return Target(key, target, penalty, penalty)
 
     @staticmethod
-    def max_limit(key: str, limit: str, penalty: str = '1') -> 'Target':
+    def max_limit(key: Union[str, Symbol], limit: Union[str, float],
+                  penalty: Union[str, float] = 1) -> 'Target':
         return Target(key, limit, 0, penalty)
 
     @staticmethod
-    def min_limit(key: str, limit: str, penalty: str = '1') -> 'Target':
+    def min_limit(key: Union[str, Symbol], limit: Union[str, float],
+                  penalty: Union[str, float] = 1) -> 'Target':
         return Target(key, limit, penalty, 0)
 
     @staticmethod
     def relative(
-            key: str, comparison: str, multiplier: str,
+            key: Union[str, Symbol], comparison: Union[str, Symbol],
+            multiplier: Union[str, float],
             low_penalty: Union[str, float],
             high_penalty: Union[str, float]) -> 'Target':
         target = sympify(multiplier) * sympify(comparison)
         return Target(key, target, low_penalty, high_penalty)
 
     @staticmethod
-    def relative_symmetric(key: str, comparison: str,
-                           multiplier: str, penalty: str = '1') -> 'Target':
+    def relative_symmetric(
+            key: Union[str, Symbol], comparison: Union[str, Symbol],
+            multiplier: Union[str, float], penalty: Union[str, float] = 1)\
+            -> 'Target':
         return Target.relative(key, comparison, multiplier, penalty, penalty)
 
     @staticmethod

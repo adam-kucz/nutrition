@@ -1,4 +1,4 @@
-from typing import Optional, TypeVar, Collection, Tuple
+from typing import Optional, TypeVar, Collection, Tuple, Union
 
 from hypothesis import assume
 import hypothesis.strategies as st
@@ -8,15 +8,20 @@ from src.nutritional_info import NutrientInfo
 
 
 def reals(*args, **kwargs) -> st.SearchStrategy[float]:
+    kwargs.setdefault('min_value', 0)
     kwargs.setdefault('allow_nan', False)
     kwargs.setdefault('allow_infinity', False)
     return st.floats(*args, **kwargs)
 
 
-def nutrients(*args, **kwargs) -> st.SearchStrategy[Symbol]:
+@st.composite
+def nutrients(draw, *args, **kwargs) -> Symbol:
     kwargs.setdefault('alphabet',
                       st.characters(blacklist_categories=('P', 'C')))
-    return st.builds(Symbol, st.text(*args, **kwargs))
+    name = (draw(st.characters(whitelist_categories=('L',))) +
+            draw(st.text(*args, **kwargs)))
+    assume(name)
+    return Symbol(name, real=True)
 
 
 @st.composite
@@ -30,27 +35,36 @@ def nut_infos(draw, min_value: float = 0,
         return NutrientInfo(symbols)
     return NutrientInfo(
         draw(st.fixed_dictionaries(
-            {sym: st.floats(min_value, max_value, allow_infinity=False)
+            {sym: reals(min_value=min_value, max_value=max_value)
              for sym in symbols})))
 
 
+S = TypeVar('S')
 T = TypeVar('T')
 
 
 @st.composite
-def collection_and_element(draw, collection: st.SearchStrategy[Collection[T]])\
-      -> Tuple[Collection[T], T]:
+def collections_with_elements(
+        draw, num: int, collection: st.SearchStrategy[Collection[T]])\
+        -> Tuple[Collection[T], Tuple[T, ...]]:
     col = draw(collection)
-    assume(col)
-    index = draw(st.integers(min_value=0, max_value=len(col) - 1))
-    for i, element in enumerate(col):
-        if index == i:
-            break
-    # pylint doesn't realise that 'assume(col)' guarantees nonempty collection
-    return col, element  # pylint: disable=undefined-loop-variable
+    assume(len(col) >= num)
+    permuted = tuple(draw(st.permutations(list(col))))
+    return col, permuted[:num]
+
+
+def with_extra(value: S, strategy: st.SearchStrategy[T])\
+        -> st.SearchStrategy[Union[T, S]]:
+    return st.one_of(st.just(value), strategy)
 
 
 # pylint: disable=no-value-for-parameter
+st.register_type_strategy(float, reals())
 st.register_type_strategy(Symbol, nutrients())
 st.register_type_strategy(NutrientInfo, nut_infos())
+# pylint: disable=no-member
+st.register_type_strategy(
+    Tuple[NutrientInfo, Symbol],
+    collections_with_elements(1, nut_infos())
+    .map(lambda pair: (pair[0], pair[1][0])))
 # pylint: enable=no-value-for-parameter

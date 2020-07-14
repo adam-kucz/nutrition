@@ -8,7 +8,6 @@ from hypothesis import given, infer, assume
 from sympy import Symbol  # type: ignore
 
 import test.src.base as base
-import test.src.strategy as sty
 from src.nutritional_info import NutrientInfo, VOID_NUTRIENT_INFO
 
 
@@ -23,7 +22,7 @@ class TestNutrientInfo(base.AdvancedTestCase):
         for value in nut_info.values():
             self.assertEqual(value, 0)
 
-    @given(mapping=st.dictionaries(st.text(), sty.reals()))
+    @given(mapping=infer)
     def test_init_mapping(self, mapping: Mapping[Symbol, float]):
         nut_info = NutrientInfo(mapping)
         self.assertCountEqual(nut_info, mapping.keys())
@@ -35,7 +34,7 @@ class TestNutrientInfo(base.AdvancedTestCase):
         original = deepcopy(copy)
         self.assertAllEqual(NutrientInfo(copy), original, copy)
 
-    @given(symbols=infer, value=sty.reals())
+    @given(symbols=infer, value=infer)
     def test_constant(self, symbols: Iterable[Symbol], value: float):
         for value_1 in NutrientInfo.constant(symbols, value).values():
             self.assertEqual(value, value_1)
@@ -61,7 +60,7 @@ class TestNutrientInfo(base.AdvancedTestCase):
             (nut_info_0 + nut_info_1) + nut_info_2,
             nut_info_0 + (nut_info_1 + nut_info_2)))
 
-    @given(symbols=infer, value_0=sty.reals(), value_1=sty.reals())
+    @given(symbols=infer, value_0=infer, value_1=infer)
     def test_add_constant(
             self, symbols: List[Symbol], value_0: float, value_1: float):
         self.assertTrue(NutrientInfo.isclose(
@@ -85,12 +84,12 @@ class TestNutrientInfo(base.AdvancedTestCase):
         nut_info_0 += nut_info_1
         self.assertEqual(nut_info_0, nut_info_0_copy + nut_info_1)
 
-    @given(nut_info=infer, mul=sty.reals())
+    @given(nut_info=infer, mul=infer)
     def test_mul_float_basic(self, nut_info: NutrientInfo, mul: float):
         self.assertEqual(nut_info * 0, NutrientInfo(nut_info.keys()))
         self.assertTrue(NutrientInfo.isclose(nut_info * mul, mul * nut_info))
 
-    @given(nut_info=infer, mul0=sty.reals(), mul1=sty.reals())
+    @given(nut_info=infer, mul0=infer, mul1=infer)
     def test_mul_float_associative(
             self, nut_info: NutrientInfo, mul0: float, mul1: float):
         for val in nut_info.values():
@@ -98,7 +97,7 @@ class TestNutrientInfo(base.AdvancedTestCase):
         self.assertTrue(NutrientInfo.isclose(
             nut_info * (mul0 * mul1), (nut_info * mul0) * mul1))
 
-    @given(nut_info=infer, mul0=sty.reals(), mul1=sty.reals())
+    @given(nut_info=infer, mul0=infer, mul1=infer)
     def test_mul_float_distributive_second(
             self, nut_info: NutrientInfo, mul0: float, mul1: float):
         for val in nut_info.values():
@@ -107,7 +106,7 @@ class TestNutrientInfo(base.AdvancedTestCase):
             nut_info * (mul0 + mul1),
             nut_info * mul0 + nut_info * mul1))
 
-    @given(nut_info0=infer, nut_info1=infer, mul=sty.reals())
+    @given(nut_info0=infer, nut_info1=infer, mul=infer)
     def test_mul_float_distributive_first(
             self, nut_info0: NutrientInfo, nut_info1: NutrientInfo,
             mul: float):
@@ -133,7 +132,7 @@ class TestNutrientInfo(base.AdvancedTestCase):
             (nut_info0 + nut_info1) * nut_info2,
             nut_info0 * nut_info2 + nut_info1 * nut_info2))
 
-    @given(nut_info=infer, multiplier=sty.reals())
+    @given(nut_info=infer, multiplier=infer)
     def test_imul(self, nut_info: NutrientInfo, multiplier: float):
         nut_info_copy = deepcopy(nut_info)
         nut_info *= multiplier
@@ -177,4 +176,3 @@ class TestNutrientInfo(base.AdvancedTestCase):
                 nut_info + NutrientInfo.constant(nut_info, delta * 1.05),
                 rel_tol=0,
                 abs_tol=delta))
-

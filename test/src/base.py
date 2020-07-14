@@ -3,6 +3,8 @@ from itertools import product
 
 
 class AdvancedTestCase(unittest.TestCase):
+    epsilon = 1e-7
+
     def assertAll(self, f, *args) -> None:
         if not args:
             return
