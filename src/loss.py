@@ -3,9 +3,10 @@ from abc import abstractmethod
 from collections import defaultdict
 from pathlib import Path
 from typing import (
-    Callable, Mapping, List, Iterable, Union, MutableMapping)
+    Callable, Mapping, List, Set, Union, MutableMapping)
 from warnings import warn
 
+from funcy import cached_readonly  # type: ignore
 from sympy import (  # type: ignore
     sympify, S,
     Symbol, Expr, Derivative, Piecewise, Lambda, Dummy)
@@ -51,16 +52,31 @@ class Loss:
 class AlgebraicLoss(Loss):
     def __init__(self, expr, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.expression = sympify(expr)
-        self.grad_exprs = defaultdict(
+        self.__expression = sympify(expr)
+
+    @property
+    def expression(self) -> Expr:
+        return self.__expression
+        
+    @cached_readonly
+    def grad_exprs(self) -> Mapping[Symbol, Expr]:
+        return defaultdict(
             lambda: S.Zero,
             {symbol: Derivative(self.expression, symbol)
              for symbol in self.symbols})
 
-    @property
-    def symbols(self) -> Iterable[Symbol]:
+    def __eq__(self, other: object) -> bool:
+        return (self.expression == other.expression
+                if isinstance(other, AlgebraicLoss)
+                else NotImplemented)
+
+    def __hash__(self) -> int:
+        return hash(self.expression)
+
+    @cached_readonly
+    def symbols(self) -> Set[Symbol]:
         return self.expression.free_symbols
-        
+
     def ensure_sufficient(self, value: NutrientInfo) -> None:
         for symbol in self.symbols:
             if symbol not in value:

@@ -49,8 +49,7 @@ class TestLoss(base.AdvancedTestCase):
             self.assertEqual(grad[other_key], 0)
 
     @given(data=infer, target=infer,
-           low_penalty=sty.with_extra(0, sty.reals(min_value=1e-5)),
-           high_penalty=sty.with_extra(0, sty.reals(min_value=1e-5)))
+           low_penalty=sty.from_or_0(1e-5), high_penalty=sty.from_or_0(1e-5))
     def test_target_loss(
             self, data: Tuple[NutrientInfo, Symbol],
             target: float, low_penalty: float, high_penalty: float):
@@ -63,11 +62,12 @@ class TestLoss(base.AdvancedTestCase):
         nut_info[key] = target
         self.assertEqual(loss.loss(nut_info), 0)
 
-    @given(data=infer, target=infer, delta=infer,
-           penalty=sty.with_extra(0, sty.reals(min_value=1e-5)))
+    @given(data=infer, target=sty.reals(max_value=1e50),
+           delta=sty.reals(exclude_min=True, max_value=1e50),
+           penalty=sty.from_or_0(1e-5))
     def test_target_symmetric(self, data: Tuple[NutrientInfo, Symbol],
                               target: float, delta: float, penalty: float):
-        assume(delta > 1e-10 * target and delta > 0)
+        assume(delta > 1e-10 * target)
         nut_info, key = data
         loss = Target.symmetric(key, target, penalty)
         grad = loss.gradient(nut_info)
@@ -86,8 +86,7 @@ class TestLoss(base.AdvancedTestCase):
                                    delta=self.epsilon*delta*penalty)
             self.assertEqual(loss.gradient(nut_info0)[key], -penalty)
 
-    @given(data=infer, limit=infer,
-           penalty=sty.with_extra(0, sty.reals(min_value=1e-5)))
+    @given(data=infer, limit=infer, penalty=sty.from_or_0(1e-5))
     def test_target_max_limit(self, data: Tuple[NutrientInfo, Symbol],
                               limit: float, penalty: float):
         nut_info, key = data
@@ -105,8 +104,7 @@ class TestLoss(base.AdvancedTestCase):
                 else:
                     self.assertEqual(grad[key1], 0)
 
-    @given(data=infer, limit=infer,
-           penalty=sty.with_extra(0, sty.reals(min_value=1e-5)))
+    @given(data=infer, limit=infer, penalty=sty.from_or_0(1e-5))
     def test_target_min_limit(self, data: Tuple[NutrientInfo, Symbol],
                               limit: float, penalty: float):
         nut_info, key = data
@@ -125,9 +123,9 @@ class TestLoss(base.AdvancedTestCase):
                     self.assertEqual(grad[key1], 0)
 
     @given(data=sty.collections_with_elements(2, sty.nut_infos()),
-           multiplier=sty.with_extra(0, sty.reals(min_value=1e-5)),
-           low_penalty=sty.with_extra(0, sty.reals(min_value=1e-5)),
-           high_penalty=sty.with_extra(0, sty.reals(min_value=1e-5)))
+           multiplier=sty.from_or_0(1e-5),
+           low_penalty=sty.from_or_0(1e-5),
+           high_penalty=sty.from_or_0(1e-5))
     def test_target_relative(
             self, data: Tuple[NutrientInfo, Tuple[Symbol, Symbol]],
             multiplier: float, low_penalty: float, high_penalty):
@@ -146,8 +144,7 @@ class TestLoss(base.AdvancedTestCase):
         self.assertAlmostEqual(grad0[key1], -multiplier*grad1[key0])
 
     @given(key0=infer, key1=infer,
-           multiplier=sty.with_extra(0, sty.reals(min_value=1e-5)),
-           penalty=sty.with_extra(0, sty.reals(min_value=1e-5)))
+           multiplier=sty.from_or_0(1e-5), penalty=sty.from_or_0(1e-5))
     def test_target_relative_symmetric(
             self, key0: Symbol, key1: Symbol,
             multiplier: float, penalty: float):

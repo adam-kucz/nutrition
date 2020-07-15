@@ -17,7 +17,7 @@ def reals(*args, **kwargs) -> st.SearchStrategy[float]:
 @st.composite
 def nutrients(draw, *args, **kwargs) -> Symbol:
     kwargs.setdefault('alphabet',
-                      st.characters(blacklist_categories=('P', 'C')))
+                      st.characters(whitelist_categories=('L', 'N', 'Zs')))
     name = (draw(st.characters(whitelist_categories=('L',))) +
             draw(st.text(*args, **kwargs)))
     assume(name)
@@ -56,6 +56,10 @@ def collections_with_elements(
 def with_extra(value: S, strategy: st.SearchStrategy[T])\
         -> st.SearchStrategy[Union[T, S]]:
     return st.one_of(st.just(value), strategy)
+
+
+def from_or_0(min_value: float = 0) -> st.SearchStrategy[float]:
+    return with_extra(0, reals(min_value=min_value))
 
 
 # pylint: disable=no-value-for-parameter
