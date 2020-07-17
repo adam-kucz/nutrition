@@ -4,23 +4,28 @@ from itertools import chain
 from operator import mul
 from typing import (Union, overload, Mapping, Iterable, MutableMapping)
 
-from funcy import partial, merge_with, walk_values  # type: ignore
+from funcy import partial, merge_with, walk_keys, walk_values  # type: ignore
 from sympy import Symbol  # type: ignore
 
 
-class NutrientInfo(UserDict, MutableMapping[Symbol, float]):
-    def __init__(self, values: Union[Mapping[Symbol, float],
-                                     Iterable[Symbol], None] = None) -> None:
+class Nutrient(Symbol):
+    def __init__(self, name: str) -> None:
+        super().__init__(name, real=True)
+    
+
+class NutrientInfo(UserDict, MutableMapping[Nutrient, float]):
+    def __init__(self, values: Union[Mapping[Nutrient, float],
+                                     Iterable[Nutrient], None] = None) -> None:
         self.data = {}  # for pylint
         if not isinstance(values, Mapping):
             values = {sym: 0 for sym in values or ()}
         super().__init__(values)
 
-    def __missing__(self, _: Symbol) -> float:
+    def __missing__(self, _: Nutrient) -> float:
         return 0
 
     @staticmethod
-    def constant(symbols: Iterable[Symbol], value: float = 0):
+    def constant(symbols: Iterable[Nutrient], value: float = 0):
         return NutrientInfo({sym: value for sym in symbols})
 
     def __add__(self, other: 'NutrientInfo') -> 'NutrientInfo':
@@ -62,3 +67,10 @@ class NutrientInfo(UserDict, MutableMapping[Symbol, float]):
 
 
 VOID_NUTRIENT_INFO = NutrientInfo()
+ENERGY = Nutrient('energy')
+CALORIC_VALUE: NutrientInfo = NutrientInfo(walk_keys(Nutrient, {
+    'carbohydrate': 4,
+    'protein': 4,
+    'sugar': 4,
+    'fat': 9,
+    'saturated': 9}))

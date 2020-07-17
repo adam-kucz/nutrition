@@ -3,7 +3,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from pathlib import Path
 from typing import (
-    Callable, Mapping, List, Set, Union, MutableMapping)
+    Type, Callable, Mapping, List, Set, Union, MutableMapping)
 from warnings import warn
 
 from funcy import cached_readonly  # type: ignore
@@ -11,10 +11,17 @@ from sympy import (  # type: ignore
     sympify, S,
     Symbol, Expr, Derivative, Piecewise, Lambda, Dummy)
 
-from .nutritional_info import NutrientInfo
-
+from .nutritional_info import NutrientInfo, CALORIC_VALUE, ENERGY
 
 Gradient = NutrientInfo
+
+
+class StrOrType:
+    def __getattr__(self, typ: Type) -> Type:
+        return Union[str, typ]
+
+
+StrOr = StrOrType()
 
 
 # TODO: figure out a standardized way of combining two NamedTuples
@@ -53,6 +60,9 @@ class AlgebraicLoss(Loss):
     def __init__(self, expr, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.__expression = sympify(expr)
+
+    def subs(self, *args, **kwargs) -> 'AlgebraicLoss':
+        return AlgebraicLoss(self.expression.subs(*args, **kwargs))
 
     @property
     def expression(self) -> Expr:
@@ -100,15 +110,6 @@ class AlgebraicLoss(Loss):
         return str(self)
 
 
-ENERGY = Symbol('energy', real=True)
-CALORIC_VALUE: NutrientInfo = NutrientInfo({
-    Symbol('carbohydrate', real=True): 4,
-    Symbol('protein', real=True): 4,
-    Symbol('sugar', real=True): 4,
-    Symbol('fat', real=True): 9,
-    Symbol('saturated', real=True): 9})
-
-
 class Target(AlgebraicLoss):
     def __init__(self, expr, target, low_penalty, high_penalty) -> None:
         expr, target, low_penalty, high_penalty =\
@@ -125,23 +126,23 @@ class Target(AlgebraicLoss):
         super().__init__(expression)
 
     @staticmethod
-    def symmetric(key: Union[str, Symbol], target: Union[str, float],
+    def symmetric(key: StrOr(Symbol), target: Union[str, float],
                   penalty: Union[str, float] = 1) -> 'Target':
         return Target(key, target, penalty, penalty)
 
     @staticmethod
-    def max_limit(key: Union[str, Symbol], limit: Union[str, float],
+    def max_limit(key: StrOr(Symbol), limit: Union[str, float],
                   penalty: Union[str, float] = 1) -> 'Target':
         return Target(key, limit, 0, penalty)
 
     @staticmethod
-    def min_limit(key: Union[str, Symbol], limit: Union[str, float],
+    def min_limit(key: StrOr(Symbol), limit: Union[str, float],
                   penalty: Union[str, float] = 1) -> 'Target':
         return Target(key, limit, penalty, 0)
 
     @staticmethod
     def relative(
-            key: Union[str, Symbol], comparison: Union[str, Symbol],
+            key: StrOr(Symbol), comparison: StrOr(Symbol),
             multiplier: Union[str, float],
             low_penalty: Union[str, float],
             high_penalty: Union[str, float]) -> 'Target':
@@ -150,14 +151,16 @@ class Target(AlgebraicLoss):
 
     @staticmethod
     def relative_symmetric(
-            key: Union[str, Symbol], comparison: Union[str, Symbol],
+            key: StrOr(Symbol), comparison: StrOr(Symbol),
             multiplier: Union[str, float], penalty: Union[str, float] = 1)\
             -> 'Target':
         return Target.relative(key, comparison, multiplier, penalty, penalty)
 
     @staticmethod
-    def relative_max_limit(key: str, comparison: str, multiplier: str,
-                           penalty: str = '1') -> 'Target':
+    def relative_max_limit(
+            key: StrOr[Symbol], comparison: Union[Symbol, str],
+            multiplier: Union[float, str], penalty: Union[float, str] = 1)\
+            -> 'Target':
         return Target.relative(key, comparison, multiplier, 0, penalty)
 
     @staticmethod
@@ -168,7 +171,7 @@ class Target(AlgebraicLoss):
     @staticmethod
     def max_energy_fraction(
             key: str, fraction: str,
-            penalty: Union[str, int] = 1) -> 'Target':
+            penalty: Union[str, float] = 1) -> 'Target':
         key = sympify(key)
         if key not in CALORIC_VALUE:
             raise ValueError(f"Unknown caloric value for '{key}'")
@@ -178,7 +181,7 @@ class Target(AlgebraicLoss):
     @staticmethod
     def energy_fraction(
             key: str, fraction: str,
-            penalty: Union[str, int] = 1) -> 'Target':
+            penalty: Union[str, float] = 1) -> 'Target':
         key = sympify(key)
         if key not in CALORIC_VALUE:
             raise ValueError(f"Unknown caloric value for '{key}'")

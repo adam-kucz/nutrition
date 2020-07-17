@@ -1,10 +1,13 @@
-from typing import Optional, TypeVar, Collection, Tuple, Union
+# pylint: disable=no-value-for-parameter
+from typing import (
+    Callable, Collection, List,
+    NamedTuple, Optional, Tuple, Type, TypeVar, Union)
 
-from hypothesis import assume
 import hypothesis.strategies as st
-from sympy import Symbol  # type: ignore
+from hypothesis import assume
+from sympy import Expr, Add, Mul, Pow, Piecewise, Derivative  # type: ignore
 
-from src.nutritional_info import NutrientInfo
+from src.nutritional_info import Nutrient, NutrientInfo
 
 
 def reals(*args, **kwargs) -> st.SearchStrategy[float]:
@@ -15,22 +18,19 @@ def reals(*args, **kwargs) -> st.SearchStrategy[float]:
 
 
 @st.composite
-def nutrients(draw, *args, **kwargs) -> Symbol:
+def nutrients(draw, *args, **kwargs) -> Nutrient:
     kwargs.setdefault('alphabet',
                       st.characters(whitelist_categories=('L', 'N', 'Zs')))
     name = (draw(st.characters(whitelist_categories=('L',))) +
             draw(st.text(*args, **kwargs)))
-    assume(name)
-    return Symbol(name, real=True)
+    return Nutrient(name)
 
 
 @st.composite
 def nut_infos(draw, min_value: float = 0,
               max_value: Optional[float] = None,
               no_values: bool = False) -> NutrientInfo:
-    # pylint: disable=no-value-for-parameter
     symbols = draw(st.iterables(nutrients()))
-    # pylint: enable=no-value-for-parameter
     if no_values:
         return NutrientInfo(symbols)
     return NutrientInfo(
@@ -62,13 +62,11 @@ def from_or_0(min_value: float = 0) -> st.SearchStrategy[float]:
     return with_extra(0, reals(min_value=min_value))
 
 
-# pylint: disable=no-value-for-parameter
 st.register_type_strategy(float, reals())
-st.register_type_strategy(Symbol, nutrients())
+st.register_type_strategy(Nutrient, nutrients())
 st.register_type_strategy(NutrientInfo, nut_infos())
 # pylint: disable=no-member
 st.register_type_strategy(
-    Tuple[NutrientInfo, Symbol],
+    Tuple[NutrientInfo, Nutrient],
     collections_with_elements(1, nut_infos())
     .map(lambda pair: (pair[0], pair[1][0])))
-# pylint: enable=no-value-for-parameter
